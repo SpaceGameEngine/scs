@@ -889,6 +889,8 @@ namespace scs
 					else
 						throw_error("do not have this function");
 				}
+				if (f == nullptr)
+					throw_error("do not have this function");
 				if (f->is_va_arg == false)
 				{
 					if (f->arguments_type_names.size() != arg_types.size())
@@ -1210,23 +1212,75 @@ namespace scs
 		in.add_function("int", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			return backend::variable{ "int",new int(0) };
 			});
+		in.add_function("float", { "float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return backend::variable{ "float",new float(args[0].as<float>()) };
+			});
+		in.add_function("float", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return backend::variable{ "float",new float(0.0f) };
+			});
+		in.add_function("char", { "char" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return backend::variable{ "char",new char(args[0].as<char>()) };
+			});
+		in.add_function("char", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return backend::variable{ "char",new char('\0') };
+			});
+		in.add_function("string", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return backend::variable{ "string",new std::string(args[0].as<std::string>()) };
+			});
+		in.add_function("string", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return backend::variable{ "string",new std::string() };
+			});
 		in.add_function("print", {}, true, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			for (auto& i : args)
 			{
-				if (i.type_name == "int")
-					std::cout << i.as<int>();
-				else if (i.type_name == "float")
-					std::cout << i.as<float>();
-				else if (i.type_name == "char")
-					std::cout << i.as<char>();
-				else if (i.type_name == "string")
-					std::cout << i.as<std::string>();
+				const backend::function& func = vc.get_function("print", { i.type_name });
+				if (func.is_va_arg)
+					throw_error("no matched print function");
+				func.run_func(vc, { i });
+			}
+			return backend::variable{ "void",nullptr };
+			});
+		in.add_function("read", {}, true, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			for (auto& i : args)
+			{
+				const backend::function& func = vc.get_function("read", { i.type_name });
+				if (func.is_va_arg)
+					throw_error("no matched print function");
+				func.run_func(vc, { i });
 			}
 			return backend::variable{ "void",nullptr };
 			});
 		in.add_function("read", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			std::cin >> args[0].as<int>();
 			return args[0];
+			});
+		in.add_function("print", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			std::cout << args[0].as<int>();
+			return backend::variable{ "void",nullptr };
+			});
+		in.add_function("read", { "float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			std::cin >> args[0].as<float>();
+			return args[0];
+			});
+		in.add_function("print", { "float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			std::cout << args[0].as<float>();
+			return backend::variable{ "void",nullptr };
+			});
+		in.add_function("read", { "char" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			std::cin >> args[0].as<char>();
+			return args[0];
+			});
+		in.add_function("print", { "char" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			std::cout << args[0].as<char>();
+			return backend::variable{ "void",nullptr };
+			});
+		in.add_function("read", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			std::cin >> args[0].as<std::string>();
+			return args[0];
+			});
+		in.add_function("print", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			std::cout << args[0].as<std::string>();
+			return backend::variable{ "void",nullptr };
 			});
 	}
 }

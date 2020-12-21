@@ -62,10 +62,25 @@ void test3()
 )";
 	in.run_from_string(str);
 }
+void test4()
+{
+	interpreter in;
+	add_core_content(in);
+	std::string str = R"(
+	(def int i)
+	(def float f)
+	(def char c)
+	(def string str)
+	(read i f c str)
+	(print i ' ' f ' ' c ' ' str '\n')
+)";
+	in.run_from_string(str);
+}
 int main()
 {
 	//test1();
-	test2();
-	test3();
+	//test2();
+	//test3();
+	test4();
 	return 0;
 }
