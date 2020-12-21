@@ -706,15 +706,22 @@ namespace scs
 		{
 			std::string type_name;
 			void* pcontent;
+			bool is_constant;
 
 			variable(const std::string& tn = "", void* p = nullptr)
-				:type_name(tn), pcontent(p)
+				:type_name(tn), pcontent(p), is_constant(false)
 			{}
 
 			template<typename T>
 			T& as()const
 			{
 				return *reinterpret_cast<T*>(pcontent);
+			}
+
+			variable& to_constant()
+			{
+				is_constant = true;
+				return *this;
 			}
 		};
 
@@ -750,7 +757,7 @@ namespace scs
 				if (iter != variables.end())
 					throw_error("the variable has already existed");
 				get_type(type_name);
-				variables.emplace(std::make_pair(name, variable{ type_name, new T(std::forward<Args>(args)...) }));
+				variables.emplace(std::make_pair(name, variable(type_name, new T(std::forward<Args>(args)...))));
 				return variables[name];
 			}
 
@@ -944,7 +951,7 @@ namespace scs
 			global_context.add_type(make_type_information<float>("float"));
 			global_context.add_type(make_type_information<std::string>("string"));
 
-			global_context.add_function(function{ "eval",{},[](context&, const std::vector<variable>&)->variable {return variable{ "void",nullptr }; } ,true });
+			global_context.add_function(function{ "eval",{},[](context&, const std::vector<variable>&)->variable {return variable("void",nullptr); } ,true });
 		}
 
 		inline ~backend()
@@ -1036,7 +1043,7 @@ namespace scs
 					}
 					else
 					{
-						return variable{ "void",nullptr };
+						return variable("void", nullptr);
 					}
 				}
 				else if (p->type == content_type::variable)
@@ -1045,19 +1052,19 @@ namespace scs
 				}
 				else if (p->type == content_type::constant_character)
 				{
-					return vc.new_unnamed_variable<char>("char", p->content[0]);
+					return vc.new_unnamed_variable<char>("char", p->content[0]).to_constant();
 				}
 				else if (p->type == content_type::constant_decimal)
 				{
-					return vc.new_unnamed_variable<float>("float", std::stof(p->content));
+					return vc.new_unnamed_variable<float>("float", std::stof(p->content)).to_constant();
 				}
 				else if (p->type == content_type::constant_integer)
 				{
-					return vc.new_unnamed_variable<int>("int", std::stoi(p->content));
+					return vc.new_unnamed_variable<int>("int", std::stoi(p->content)).to_constant();
 				}
 				else if (p->type == content_type::constant_string)
 				{
-					return vc.new_unnamed_variable<std::string>("string", p->content);
+					return vc.new_unnamed_variable<std::string>("string", p->content).to_constant();
 				}
 			}
 		}
@@ -1098,6 +1105,10 @@ namespace scs
 		{
 			mbackend.add_key_word(key_word_name, backend::key_word{ func });
 		}
+		backend::variable& add_variable(const std::string& var_name, const backend::variable& v)
+		{
+			return mbackend.get_global_context().move_existed_variable(var_name, v);
+		}
 		void run_from_file(const std::string& file_name)
 		{
 			std::string strbuff;
@@ -1125,7 +1136,10 @@ namespace scs
 
 	void add_core_content(interpreter& in)
 	{
-		in.add_key_word("def", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
+		in.add_variable("true", backend::variable("int", new int(1))).to_constant();
+		in.add_variable("false", backend::variable("int", new int(0))).to_constant();
+
+		in.add_key_word("var", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
 			if (!p)
 				throw_error("nullptr error");
 			if (p->pchildren.size() < 3 ||
@@ -1153,7 +1167,35 @@ namespace scs
 			auto var = vc.get_function(type_name, arg_types).run_func(vc, args);
 			return vc.move_existed_variable(var_name, var);
 			});
-		in.add_key_word("def_func", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
+		in.add_key_word("const", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
+			if (!p)
+				throw_error("nullptr error");
+			if (p->pchildren.size() < 3 ||
+				p->pchildren[1]->type != content_type::variable ||
+				p->pchildren[2]->type != content_type::variable)
+				throw_error("error def call");
+			auto type_name = p->pchildren[1]->content;
+			auto var_name = p->pchildren[2]->content;
+			if (vc.has_variable(var_name))
+				throw_error("already has this variable");
+			if (vc.find_type(type_name).has_value() == false)
+				throw_error("do not have this type");
+
+
+			std::vector<backend::variable> args;
+			std::vector<std::string> arg_types;
+
+			backend::context nvc(&vc);
+			for (int i = 3; i < p->pchildren.size(); i++)
+			{
+				args.emplace_back(b.evaluate(p->pchildren[i], nvc));
+				arg_types.emplace_back(args[args.size() - 1].type_name);
+			}
+
+			auto var = vc.get_function(type_name, arg_types).run_func(vc, args);
+			return vc.move_existed_variable(var_name, var).to_constant();
+			});
+		in.add_key_word("func", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
 			if (!p)
 				throw_error("nullptr error");
 			if (p->pchildren.size() < 3 ||
@@ -1204,31 +1246,32 @@ namespace scs
 
 			vc.add_function(f);
 
-			return backend::variable{ "function",(backend::function*)&(vc.get_function(func_name,arg_types)) };
+			return backend::variable("function", (backend::function*)&(vc.get_function(func_name, arg_types)));
 			});
+
 		in.add_function("int", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable{ "int",new int(args[0].as<int>()) };
+			return backend::variable("int", new int(args[0].as<int>()));
 			});
 		in.add_function("int", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable{ "int",new int(0) };
+			return backend::variable("int", new int(0));
 			});
 		in.add_function("float", { "float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable{ "float",new float(args[0].as<float>()) };
+			return backend::variable("float", new float(args[0].as<float>()));
 			});
 		in.add_function("float", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable{ "float",new float(0.0f) };
+			return backend::variable("float", new float(0.0f));
 			});
 		in.add_function("char", { "char" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable{ "char",new char(args[0].as<char>()) };
+			return backend::variable("char", new char(args[0].as<char>()));
 			});
 		in.add_function("char", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable{ "char",new char('\0') };
+			return backend::variable("char", new char('\0'));
 			});
 		in.add_function("string", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable{ "string",new std::string(args[0].as<std::string>()) };
+			return backend::variable("string", new std::string(args[0].as<std::string>()));
 			});
 		in.add_function("string", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable{ "string",new std::string() };
+			return backend::variable("string", new std::string());
 			});
 		in.add_function("print", {}, true, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			for (auto& i : args)
@@ -1238,49 +1281,59 @@ namespace scs
 					throw_error("no matched print function");
 				func.run_func(vc, { i });
 			}
-			return backend::variable{ "void",nullptr };
+			return backend::variable("void", nullptr);
 			});
 		in.add_function("read", {}, true, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			for (auto& i : args)
 			{
+				if (i.is_constant)
+					throw_error("can not read a constant value");
 				const backend::function& func = vc.get_function("read", { i.type_name });
 				if (func.is_va_arg)
 					throw_error("no matched print function");
 				func.run_func(vc, { i });
 			}
-			return backend::variable{ "void",nullptr };
+			return backend::variable("void", nullptr);
 			});
 		in.add_function("read", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not read a constant value");
 			std::cin >> args[0].as<int>();
 			return args[0];
 			});
 		in.add_function("print", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			std::cout << args[0].as<int>();
-			return backend::variable{ "void",nullptr };
+			return backend::variable("void", nullptr);
 			});
 		in.add_function("read", { "float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not read a constant value");
 			std::cin >> args[0].as<float>();
 			return args[0];
 			});
 		in.add_function("print", { "float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			std::cout << args[0].as<float>();
-			return backend::variable{ "void",nullptr };
+			return backend::variable("void", nullptr);
 			});
 		in.add_function("read", { "char" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not read a constant value");
 			std::cin >> args[0].as<char>();
 			return args[0];
 			});
 		in.add_function("print", { "char" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			std::cout << args[0].as<char>();
-			return backend::variable{ "void",nullptr };
+			return backend::variable("void", nullptr);
 			});
 		in.add_function("read", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not read a constant value");
 			std::cin >> args[0].as<std::string>();
 			return args[0];
 			});
 		in.add_function("print", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			std::cout << args[0].as<std::string>();
-			return backend::variable{ "void",nullptr };
+			return backend::variable("void", nullptr);
 			});
 	}
 }
