@@ -6,6 +6,7 @@
 #include <functional>
 #include <fstream>
 #include <unordered_map>
+#include <optional>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -560,7 +561,7 @@ namespace scs
 		{
 			for (int i = 0; i < depth; i++)
 				std::cout << "--";
-			std::cout << pnow->content << " : " << (int)pnow->type << std::endl;
+			std::cout << ">" << pnow->content << " : " << (int)pnow->type << std::endl;
 			for (auto& i : pnow->pchildren)
 			{
 				if (i)
@@ -643,7 +644,8 @@ namespace scs
 				tokens[index].type == token_type::mod_mark ||
 				tokens[index].type == token_type::and_mark ||
 				tokens[index].type == token_type::exclamation_mark ||
-				tokens[index].type == token_type::vertical
+				tokens[index].type == token_type::vertical ||
+				tokens[index].type == token_type::option
 				)
 			{
 				//symbol
@@ -698,7 +700,7 @@ namespace scs
 	class backend
 	{
 	public:
-		friend class variable_context;
+		friend class context;
 
 		struct variable
 		{
@@ -724,18 +726,20 @@ namespace scs
 			std::function<void(void*, void*)> copy_func;		//dest src
 		};
 
-		class variable_context
+		struct function;
+
+		class context
 		{
 		public:
-			inline variable_context(backend& b, variable_context* pf = nullptr)
-				:types(b.types), pfather(pf), unname_count(0)
+			inline context(context* pf = nullptr)
+				:pfather(pf), unname_count(0)
 			{}
 
-			inline ~variable_context()
+			inline ~context()
 			{
 				for (auto& i : variables)
 				{
-					types[i.second.type_name].destruction_func(i.second.pcontent);
+					get_type(i.second.type_name).destruction_func(i.second.pcontent);
 				}
 			}
 
@@ -745,9 +749,7 @@ namespace scs
 				auto iter = variables.find(name);
 				if (iter != variables.end())
 					throw_error("the variable has already existed");
-				auto iter2 = types.find(type_name);
-				if (iter2 == types.end())
-					throw_error("do not have this type");
+				get_type(type_name);
 				variables.emplace(std::make_pair(name, variable{ type_name, new T(std::forward<Args>(args)...) }));
 				return variables[name];
 			}
@@ -767,14 +769,9 @@ namespace scs
 				return new_variable<T>("non_name_var@" + std::to_string(unname_count++), type_name, std::forward<Args>(args)...);
 			}
 
-			inline const std::unordered_map<std::string, type_information>& get_types()
+			inline const variable& find_variable(const std::string& name)const
 			{
-				return types;
-			}
-
-			inline variable& find_variable(const std::string& name)
-			{
-				variable_context* vc = this;
+				const context* vc = this;
 				while (vc != nullptr)
 				{
 					auto iter = vc->variables.find(name);
@@ -786,9 +783,9 @@ namespace scs
 				throw_error("do not have this variable");
 			}
 
-			inline bool has_variable(const std::string& name)
+			inline bool has_variable(const std::string& name)const
 			{
-				variable_context* vc = this;
+				const context* vc = this;
 				while (vc != nullptr)
 				{
 					auto iter = vc->variables.find(name);
@@ -800,10 +797,116 @@ namespace scs
 				return false;
 			}
 
+			inline void add_type(const type_information& t)
+			{
+				types.insert(std::make_pair(t.type_name, t));
+			}
+
+			inline const type_information& get_type(const std::string& type_name)const
+			{
+				const context* vc = this;
+				while (vc != nullptr)
+				{
+					auto iter = vc->types.find(type_name);
+					if (iter != vc->types.end())
+						return iter->second;
+					else
+						vc = vc->pfather;
+				}
+				throw_error("do not have this type");
+			}
+
+			inline std::optional<const type_information*> find_type(const std::string& type_name)const
+			{
+				const context* vc = this;
+				while (vc != nullptr)
+				{
+					auto iter = vc->types.find(type_name);
+					if (iter != vc->types.end())
+						return &iter->second;
+					else
+						vc = vc->pfather;
+				}
+				return std::nullopt;
+			}
+
+			inline void add_function(const function& f)
+			{
+				auto fname = resolve_function_name(f);
+				if (functions.find(fname) == functions.end())
+					functions.insert(std::make_pair(fname, f));
+				else
+					throw_error("the function has already existed");
+				new_variable <function>(fname, "function", f);
+			}
+
+			inline const function& get_function_by_resolved_name(const std::string& resolved_func_name)const
+			{
+				const context* vc = this;
+				while (vc != nullptr)
+				{
+					auto iter = vc->functions.find(resolved_func_name);
+					if (iter != vc->functions.end())
+						return iter->second;
+					else
+						vc = vc->pfather;
+				}
+				throw_error("do not have this function");
+			}
+
+			inline std::optional<const function*> find_function_by_resolved_name(const std::string& resolved_func_name)const
+			{
+				const context* vc = this;
+				while (vc != nullptr)
+				{
+					auto iter = vc->functions.find(resolved_func_name);
+					if (iter != vc->functions.end())
+						return &iter->second;
+					else
+						vc = vc->pfather;
+				}
+				return std::nullopt;
+			}
+
+			inline const function& get_function(const std::string& func_name, const std::vector<std::string>& arg_types)const
+			{
+				const function* f = nullptr;
+				function buff_f;
+				buff_f.function_name = func_name;
+				buff_f.arguments_type_names = arg_types;
+				auto fname = backend::resolve_function_name(buff_f);
+
+				auto opt = find_function_by_resolved_name(fname);
+				if (opt)
+				{
+					f = opt.value();
+				}
+				else
+				{
+					auto opt2 = find_function_by_resolved_name(func_name);
+					if (opt2)
+						f = opt2.value();
+					else
+						throw_error("do not have this function");
+				}
+				if (f->is_va_arg == false)
+				{
+					if (f->arguments_type_names.size() != arg_types.size())
+						throw_error("error function call arguments");
+					for (int i = 0; i < arg_types.size(); i++)
+					{
+						if (f->arguments_type_names[i] != arg_types[i])
+							throw_error("error function call arguments");
+					}
+				}
+				return *f;
+			}
+
 		private:
 			std::unordered_map<std::string, variable> variables;
-			std::unordered_map<std::string, type_information>& types;
-			variable_context* pfather;
+			std::unordered_map<std::string, backend::function> functions;
+			std::unordered_map<std::string, type_information> types;
+			context* pfather;
 			int unname_count;
 		};
 
@@ -818,28 +921,28 @@ namespace scs
 
 		struct key_word
 		{
-			std::function<variable(backend&, variable_context&, ast_node*)> run_func;
+			std::function<variable(backend&, context&, ast_node*)> run_func;
 		};
 
 		struct function
 		{
 			std::string function_name;
 			std::vector<std::string> arguments_type_names;
-			std::function<variable(variable_context&, const std::vector<variable>&)> run_func;
+			std::function<variable(context&, const std::vector<variable>&)> run_func;
 			bool is_va_arg = false;
 		};
 
 		inline backend()
-			:global_variable_context(*this, nullptr)
+			:global_context(nullptr)
 		{
-			add_type(type_information{ "void" ,[]() {return nullptr; },[](void*) {},[](void*,void*) {} });
-			add_type(make_type_information<function>("function"));
-			add_type(make_type_information<char>("char"));
-			add_type(make_type_information<int>("int"));
-			add_type(make_type_information<float>("float"));
-			add_type(make_type_information<std::string>("string"));
+			global_context.add_type(type_information{ "void" ,[]() {return nullptr; },[](void*) {},[](void*,void*) {} });
+			global_context.add_type(make_type_information<function>("function"));
+			global_context.add_type(make_type_information<char>("char"));
+			global_context.add_type(make_type_information<int>("int"));
+			global_context.add_type(make_type_information<float>("float"));
+			global_context.add_type(make_type_information<std::string>("string"));
 
-			add_function(function{ "eval",{},[](variable_context&, const std::vector<variable>&)->variable {return variable{ "void",nullptr }; } ,true });
+			global_context.add_function(function{ "eval",{},[](context&, const std::vector<variable>&)->variable {return variable{ "void",nullptr }; } ,true });
 		}
 
 		inline ~backend()
@@ -858,71 +961,6 @@ namespace scs
 			return re;
 		}
 
-		inline void add_function(const function& f)
-		{
-			auto fname = resolve_function_name(f);
-			if (functions.find(fname) == functions.end())
-				functions.insert(std::make_pair(fname, f));
-			else
-				throw_error("the function has already existed");
-			global_variable_context.new_variable <function>(fname, "function", f);
-		}
-
-		inline const function& get_function_by_resolved_name(const std::string& resolved_func_name)
-		{
-			auto iter = functions.find(resolved_func_name);
-			if (iter == functions.end())
-				throw_error("do not have this func");
-			return iter->second;
-		}
-
-		inline const function& get_function(const std::string& func_name, const std::vector<std::string>& arg_types)
-		{
-			function* f = nullptr;
-			function buff_f;
-			buff_f.function_name = func_name;
-			buff_f.arguments_type_names = arg_types;
-			auto fname = resolve_function_name(buff_f);
-
-			auto iter = functions.find(fname);
-			if (iter != functions.end())
-			{
-				f = &iter->second;
-			}
-			else
-			{
-				iter = functions.find(func_name);
-				if (iter != functions.end())
-					f = &iter->second;
-				else
-					throw_error("do not have this function");
-			}
-			if (f->is_va_arg == false)
-			{
-				if (f->arguments_type_names.size() != arg_types.size())
-					throw_error("error function call arguments");
-				for (int i = 0; i < arg_types.size(); i++)
-				{
-					if (f->arguments_type_names[i] != arg_types[i])
-						throw_error("error function call arguments");
-				}
-			}
-			return *f;
-		}
-
-		inline void add_type(const type_information& t)
-		{
-			types.insert(std::make_pair(t.type_name, t));
-		}
-
-		inline const type_information& get_type(const std::string& type_name)
-		{
-			auto iter = types.find(type_name);
-			if (iter == types.end())
-				throw_error("do not have this type");
-			return iter->second;
-		}
-
 		inline void add_key_word(const std::string& name, const key_word& k)
 		{
 			auto iter = key_words.find(name);
@@ -931,7 +969,7 @@ namespace scs
 			key_words.insert(make_pair(name, k));
 		}
 
-		inline variable evaluate(ast_node* p, variable_context& vc)
+		inline variable evaluate(ast_node* p, context& vc)
 		{
 			if (!p)
 			{
@@ -943,7 +981,7 @@ namespace scs
 				{
 					if (p->pchildren.size() != 0)
 					{
-						variable_context nvc(*this, &vc);
+						context nvc(&vc);
 
 						const function* f = nullptr;
 
@@ -975,7 +1013,7 @@ namespace scs
 						{
 							if (p->pchildren[0]->type != content_type::variable)
 								throw_error("can not evaluate this thing");
-							f = &get_function(p->pchildren[0]->content, arg_types);
+							f = &(vc.get_function(p->pchildren[0]->content, arg_types));
 						}
 						else
 						{
@@ -1025,13 +1063,21 @@ namespace scs
 		inline void run(ast_node* p)
 		{
 			for (auto i : p->pchildren)
-				evaluate(i, global_variable_context);
+				evaluate(i, global_context);
+		}
+
+		inline context& get_global_context()
+		{
+			return global_context;
+		}
+
+		inline const context& get_global_context()const
+		{
+			return global_context;
 		}
 	private:
-		std::unordered_map<std::string, function> functions;
-		std::unordered_map<std::string, type_information> types;
 		std::unordered_map<std::string, key_word> key_words;
-		variable_context global_variable_context;
+		context global_context;
 	};
 
 	class interpreter
@@ -1040,13 +1086,13 @@ namespace scs
 		template<typename T>
 		void add_type(const std::string& type_name)
 		{
-			mbackend.add_type(backend::make_type_information<T>(type_name));
+			mbackend.get_global_context().add_type(backend::make_type_information<T>(type_name));
 		}
-		void add_function(const std::string& func_name, const std::vector<std::string>& func_args_type, bool is_va_arg, const std::function<backend::variable(backend::variable_context&, const std::vector<backend::variable>&)>& run_func)
+		void add_function(const std::string& func_name, const std::vector<std::string>& func_args_type, bool is_va_arg, const std::function<backend::variable(backend::context&, const std::vector<backend::variable>&)>& run_func)
 		{
-			mbackend.add_function(backend::function{ func_name,func_args_type,run_func,is_va_arg });
+			mbackend.get_global_context().add_function(backend::function{ func_name,func_args_type,run_func,is_va_arg });
 		}
-		void add_key_word(const std::string& key_word_name, const std::function<backend::variable(backend&, backend::variable_context&, ast_node*)>& func)
+		void add_key_word(const std::string& key_word_name, const std::function<backend::variable(backend&, backend::context&, ast_node*)>& func)
 		{
 			mbackend.add_key_word(key_word_name, backend::key_word{ func });
 		}
@@ -1077,7 +1123,7 @@ namespace scs
 
 	void add_core_content(interpreter& in)
 	{
-		in.add_key_word("def", [](backend& b, backend::variable_context& vc, ast_node* p)->backend::variable {
+		in.add_key_word("def", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
 			if (!p)
 				throw_error("nullptr error");
 			if (p->pchildren.size() < 3 ||
@@ -1088,24 +1134,24 @@ namespace scs
 			auto var_name = p->pchildren[2]->content;
 			if (vc.has_variable(var_name))
 				throw_error("already has this variable");
-			if (vc.get_types().find(type_name) == vc.get_types().end())
+			if (vc.find_type(type_name).has_value() == false)
 				throw_error("do not have this type");
 
 
 			std::vector<backend::variable> args;
 			std::vector<std::string> arg_types;
 
-			backend::variable_context nvc(b, &vc);
+			backend::context nvc(&vc);
 			for (int i = 3; i < p->pchildren.size(); i++)
 			{
 				args.emplace_back(b.evaluate(p->pchildren[i], nvc));
 				arg_types.emplace_back(args[args.size() - 1].type_name);
 			}
 
-			auto var = b.get_function(type_name, arg_types).run_func(vc, args);
+			auto var = vc.get_function(type_name, arg_types).run_func(vc, args);
 			return vc.move_existed_variable(var_name, var);
 			});
-		in.add_key_word("def_func", [](backend& b, backend::variable_context& vc, ast_node* p)->backend::variable {
+		in.add_key_word("def_func", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
 			if (!p)
 				throw_error("nullptr error");
 			if (p->pchildren.size() < 3 ||
@@ -1127,7 +1173,7 @@ namespace scs
 					throw_error("error argument define");
 
 				std::string type_name = parg->pchildren[0]->content;
-				if (vc.get_types().find(type_name) == vc.get_types().end())
+				if (vc.find_type(type_name).has_value() == false)
 					throw_error("do not have this type");
 				arg_types.emplace_back(type_name);
 
@@ -1140,13 +1186,13 @@ namespace scs
 			f.function_name = func_name;
 			f.arguments_type_names = arg_types;
 			f.is_va_arg = false;
-			f.run_func = [&b, arg_names, run_node](backend::variable_context& vc, const std::vector<backend::variable>& args)->backend::variable {
-				backend::variable_context nvc(b, &vc);
+			f.run_func = [&b, arg_names, run_node](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+				backend::context nvc(&vc);
 				if (args.size() != arg_names.size())
 					throw_error("error function call");
 				for (int i = 0; i < args.size(); i++)
 				{
-					const backend::type_information& ti = b.get_type(args[i].type_name);
+					const backend::type_information& ti = vc.get_type(args[i].type_name);
 					void* pnv = ti.default_construction_func();
 					ti.copy_func(pnv, args[i].pcontent);
 					nvc.move_existed_variable(arg_names[i], backend::variable(ti.type_name, pnv));
@@ -1154,17 +1200,17 @@ namespace scs
 				return b.evaluate(run_node, nvc);
 			};
 
-			b.add_function(f);
+			vc.add_function(f);
 
-			return backend::variable{ "function",(backend::function*)&(b.get_function(func_name,arg_types)) };
+			return backend::variable{ "function",(backend::function*)&(vc.get_function(func_name,arg_types)) };
 			});
-		in.add_function("int", { "int" }, false, [](backend::variable_context& vc, const std::vector<backend::variable>& args)->backend::variable {
+		in.add_function("int", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			return backend::variable{ "int",new int(args[0].as<int>()) };
 			});
-		in.add_function("int", { }, false, [](backend::variable_context& vc, const std::vector<backend::variable>& args)->backend::variable {
+		in.add_function("int", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			return backend::variable{ "int",new int(0) };
 			});
-		in.add_function("print", {}, true, [](backend::variable_context& vc, const std::vector<backend::variable>& args)->backend::variable {
+		in.add_function("print", {}, true, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			for (auto& i : args)
 			{
 				if (i.type_name == "int")
@@ -1178,7 +1224,7 @@ namespace scs
 			}
 			return backend::variable{ "void",nullptr };
 			});
-		in.add_function("read", { "int" }, false, [](backend::variable_context& vc, const std::vector<backend::variable>& args)->backend::variable {
+		in.add_function("read", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			std::cin >> args[0].as<int>();
 			return args[0];
 			});

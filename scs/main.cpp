@@ -24,6 +24,7 @@ void test2()
 		(assign f 10.2)
 		(print 1.0 2.0 3.0 f 1 "test my list script\n")
 		(!= (& (| 1 2) (+ 3 4)) (% 4 2))
+		(--)
 )
 		)") + std::string("\n"));
 	p.debug_print_ast();
@@ -47,9 +48,18 @@ void test3()
 		(read b)
 		(print b '\n')
 	)
-	((def_func println (int n)
-		(print n '\n')) 3)
-	))";
+	(
+		(def_func println (int n)
+			(print n '\n')
+		) 
+	3)
+	(def_func println (string str)
+		(print str '\n')
+	)
+	(println "test function")
+	)
+	(print "test other block\n")
+)";
 	in.run_from_string(str);
 }
 int main()
