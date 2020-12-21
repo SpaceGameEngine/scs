@@ -1146,7 +1146,7 @@ namespace scs
 					throw_error("error function call");
 				for (int i = 0; i < args.size(); i++)
 				{
-					auto ti = b.get_type(args[i].type_name);
+					const backend::type_information& ti = b.get_type(args[i].type_name);
 					void* pnv = ti.default_construction_func();
 					ti.copy_func(pnv, args[i].pcontent);
 					nvc.move_existed_variable(arg_names[i], backend::variable(ti.type_name, pnv));
