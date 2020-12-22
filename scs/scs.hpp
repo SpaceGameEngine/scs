@@ -65,7 +65,14 @@ namespace scs
 		bigger_equal = 36,			//>=
 		point_to = 37,				//->
 		belong_to = 38,				//::
-		option = 39					//--
+		option = 39,				//--
+		self_add = 40,				//+=
+		self_sub = 41,				//-=
+		self_mul = 42,				//*=
+		self_div = 43,				///=
+		self_mod = 44,				//%=
+		self_and = 45,				//&=
+		self_or = 46				//|=
 	};
 
 	enum class parse_status
@@ -103,25 +110,105 @@ namespace scs
 		{
 			if (str.size() <= 2)
 			{
-				for (auto& i : str)
+				int neg_pos = str.find('-');
+				std::string str2;
+				if (neg_pos == 0)
+					str2 = str.substr(1, str.size() - 1);
+				else if (neg_pos != std::string::npos)
+					return false;
+				else
+					str2 = str;
+				if (str2.empty())
+					return false;
+				for (auto& i : str2)
 					if (i < '0' || i>'9')
 						return false;
 				return true;
 			}
 			else
 			{
-				if (str[0] < '0' || str[0]>'9')
+				int neg_pos = str.find('-');
+				std::string str2;
+				if (neg_pos == 0)
+					str2 = str.substr(1, str.size() - 1);
+				else if (neg_pos != std::string::npos)
 					return false;
-				if ((str[1] < '0' || str[1]>'9') && str[1] != 'x' && str[1] != 'b')
+				else
+					str2 = str;
+				if (str2.empty())
 					return false;
-				for (std::size_t i = 2; i < str.size(); i++)
+				if (str2[0] < '0' || str2[0]>'9')
+					return false;
+				int base = 10;
+				if ((str2[1] < '0' || str2[1]>'9') && str2[1] != 'x' && str2[1] != 'b')
+					return false;
+				if (str2[1] == 'x')
+					base = 16;
+				if (str2[1] == 'b')
+					base = 2;
+				for (std::size_t i = 2; i < str2.size(); i++)
 				{
-					if (str[i] < '0' || str[i]>'9')
-						return false;
+					if (base <= 10)
+					{
+						if (str2[i] - '0' >= base || str2[i] - '0' < 0)
+							return false;
+					}
+					else if (base == 16)
+					{
+						if ((str2[i] < '0' || str2[i]>'9') &&
+							(str2[i] < 'a' || str2[i]>'f') &&
+							(str2[i] < 'A' || str2[i]>'F'))
+							return false;
+					}
 				}
 				return true;
 			}
 		}
+	}
+
+	int to_int(const std::string& str)
+	{
+		bool is_nega = false;
+		std::string str2;
+		if (str[0] == '-')
+		{
+			is_nega = true;
+			str2 = str.substr(1, str.size() - 1);
+		}
+		else
+			str2 = str;
+		int base = 10;
+		if (str2.size() > 2)
+		{
+			if (str2[1] == 'x')
+			{
+				base = 16;
+				str2 = str2.substr(2, str2.size() - 2);
+			}
+			else if (str2[1] == 'b')
+			{
+				base = 2;
+				str2 = str2.substr(2, str2.size() - 2);
+			}
+		}
+		int re = 0;
+		for (int i = 0; i < str2.size(); i++)
+		{
+			if (base <= 10)
+				re = re * base + (str2[i] - '0');
+			else
+			{
+				if (str2[i] >= 'a' && str2[i] <= 'z')
+					re = re * base + (str2[i] - 'a') + 10;
+				else if (str2[i] >= 'A' && str2[i] <= 'Z')
+					re = re * base + (str2[i] - 'A') + 10;
+				else
+					re = re * base + (str2[i] - '0');
+			}
+		}
+		if (is_nega)
+			re *= -1;
+		return re;
 	}
 
 	inline bool is_decimal(const std::string& str)
@@ -130,7 +217,17 @@ namespace scs
 		auto p = str.find(".");
 		if (p == str.npos)
 		{
-			for (auto& i : str)
+			int neg_pos = str.find('-');
+			std::string str2;
+			if (neg_pos == 0)
+				str2 = str.substr(1, str.size() - 1);
+			else if (neg_pos != std::string::npos)
+				return false;
+			else
+				str2 = str;
+			if (str2.empty())
+				return false;
+			for (auto& i : str2)
 				if (i < '0' || i > '9')
 					return false;
 			return true;
@@ -139,11 +236,24 @@ namespace scs
 		{
 			if (p == 0)
 				return false;
+			int neg_pos = str.find('-');
+			std::string str2;
+			if (neg_pos == 0)
+			{
+				str2 = str.substr(1, str.size() - 1);
+				p -= 1;
+			}
+			else if (neg_pos != std::string::npos)
+				return false;
+			else
+				str2 = str;
+			if (str2.empty())
+				return false;
 			for (int i = 0; i < p; i++)
-				if (str[i] < '0' || str[i]>'9')
+				if (str2[i] < '0' || str2[i]>'9')
 					return false;
-			for (int i = p + 1; i < str.size(); i++)
-				if (str[i] < '0' || str[i]>'9')
+			for (int i = p + 1; i < str2.size(); i++)
+				if (str2[i] < '0' || str2[i]>'9')
 					return false;
 			return true;
 		}
@@ -184,6 +294,20 @@ namespace scs
 			return token_type::belong_to;
 		else if (str == "--")
 			return token_type::option;
+		else if (str == "+=")
+			return token_type::self_add;
+		else if (str == "-=")
+			return token_type::self_sub;
+		else if (str == "*=")
+			return token_type::self_mul;
+		else if (str == "/=")
+			return token_type::self_div;
+		else if (str == "%=")
+			return token_type::self_mod;
+		else if (str == "&=")
+			return token_type::self_and;
+		else if (str == "|=")
+			return token_type::self_or;
 		else
 			return token_type::null;
 	}
@@ -357,7 +481,13 @@ namespace scs
 				{
 					if (is_divide(c) || get_symbol_type(c) != token_type::null || c == '\'' || c == '\"' || get_symbol_type(sbuf[0]) != token_type::null)
 					{
-						if (is_integer(sbuf) && (get_symbol_type(c) == token_type::dot))
+						if (is_integer(sbuf + c) || is_decimal(sbuf + c))
+						{
+							sbuf += c;
+							continue;
+						}
+						else if (sbuf.size() == 1 && sbuf[0] == '0' &&
+							(c == 'x' || c == 'b'))
 						{
 							sbuf += c;
 							continue;
@@ -648,7 +778,14 @@ namespace scs
 				tokens[index].type == token_type::and_mark ||
 				tokens[index].type == token_type::exclamation_mark ||
 				tokens[index].type == token_type::vertical ||
-				tokens[index].type == token_type::option
+				tokens[index].type == token_type::option ||
+				tokens[index].type == token_type::self_add ||
+				tokens[index].type == token_type::self_sub ||
+				tokens[index].type == token_type::self_mul ||
+				tokens[index].type == token_type::self_div ||
+				tokens[index].type == token_type::self_mod ||
+				tokens[index].type == token_type::self_and ||
+				tokens[index].type == token_type::self_or
 				)
 			{
 				//symbol
@@ -734,6 +871,12 @@ namespace scs
 			std::function<void* ()> default_construction_func;
 			std::function<void(void*)> destruction_func;
 			std::function<void(void*, void*)> copy_func;		//dest src
+			std::function<bool(void*, void*)> is_equal_func;
+			std::function<bool(void*, void*)> is_not_equal_func;
+			std::function<bool(void*, void*)> is_less_func;
+			std::function<bool(void*, void*)> is_less_or_equal_func;
+			std::function<bool(void*, void*)> is_bigger_func;
+			std::function<bool(void*, void*)> is_bigger_or_equal_func;
 		};
 
 		struct function;
@@ -810,6 +953,39 @@ namespace scs
 			inline void add_type(const type_information& t)
 			{
 				types.insert(std::make_pair(t.type_name, t));
+				//more func bind
+				add_function(function{ t.type_name,{},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return variable(t.type_name,t.default_construction_func());
+					} ,false });	//default construction
+				add_function(function{ t.type_name,{t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						variable re(t.type_name,t.default_construction_func());
+						t.copy_func(re.pcontent, args[0].pcontent);
+						return re;
+					} ,false });	//default construction
+				add_function(function{ "=",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+					if (args[0].is_constant)
+						throw_error("can not change constant value");
+					t.copy_func(args[0].pcontent,args[1].pcontent);
+						return args[0];
+					} ,false });	//copy
+				add_function(function{ "==",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",(t.is_equal_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+					} ,false });	//equal
+				add_function(function{ "!=",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",(t.is_not_equal_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+					} ,false });	//not equal
+				add_function(function{ "<",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",(t.is_less_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+					} ,false });	//less
+				add_function(function{ "<=",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",(t.is_less_or_equal_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+					} ,false });	//less or equal
+				add_function(function{ ">",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",(t.is_bigger_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+					} ,false });	//bigger
+				add_function(function{ ">=",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",(t.is_bigger_or_equal_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+					} ,false });	//bigger or equal
 			}
 
 			inline const type_information& get_type(const std::string& type_name)const
@@ -928,7 +1104,14 @@ namespace scs
 			return type_information{ type_name ,
 				[]() {return new T(); },
 				[](void* p) {delete reinterpret_cast<T*>(p); } ,
-				[](void* dest,void* src) {*reinterpret_cast<T*>(dest) = *reinterpret_cast<T*>(src); } };
+				[](void* dest,void* src) {*reinterpret_cast<T*>(dest) = *reinterpret_cast<T*>(src); },
+				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) == *reinterpret_cast<T*>(p2); },
+				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) != *reinterpret_cast<T*>(p2); },
+				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) < *reinterpret_cast<T*>(p2); },
+				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) <= *reinterpret_cast<T*>(p2); },
+				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) > *reinterpret_cast<T*>(p2); },
+				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) >= *reinterpret_cast<T*>(p2); }
+			};
 		}
 
 		struct key_word
@@ -942,13 +1125,50 @@ namespace scs
 			std::vector<std::string> arguments_type_names;
 			std::function<variable(context&, const std::vector<variable>&)> run_func;
 			bool is_va_arg = false;
+
+			inline bool operator == (const function& f)const
+			{
+				return backend::resolve_function_name(*this) == backend::resolve_function_name(f) &&
+					is_va_arg == f.is_va_arg;
+			}
+			inline bool operator != (const function& f)const
+			{
+				return (*this == f) == false;
+			}
+			inline bool operator < (const function& f)const
+			{
+				return backend::resolve_function_name(*this) < backend::resolve_function_name(f);
+			}
+			inline bool operator <= (const function& f)const
+			{
+				return backend::resolve_function_name(*this) <= backend::resolve_function_name(f);
+			}
+			inline bool operator > (const function& f)const
+			{
+				return backend::resolve_function_name(*this) > backend::resolve_function_name(f);
+			}
+			inline bool operator >= (const function& f)const
+			{
+				return backend::resolve_function_name(*this) >= backend::resolve_function_name(f);
+			}
 		};
 
 		inline backend()
 			:global_context(nullptr)
 		{
-			global_context.add_type(type_information{ "void" ,[]() {return nullptr; },[](void*) {},[](void*,void*) {} });
 			global_context.add_type(make_type_information<function>("function"));
+
+			global_context.add_type(type_information{ "void" ,
+				[]() {return nullptr; },
+				[](void*) {},[](void*,void*) {} ,
+				[](void*,void*) {return true; } ,
+				[](void*,void*) {return false; } ,
+				[](void*,void*) {return false; } ,
+				[](void*,void*) {return true; } ,
+				[](void*,void*) {return false; } ,
+				[](void*,void*) {return true; }
+				});
+
 			global_context.add_type(make_type_information<char>("char"));
 			global_context.add_type(make_type_information<int>("int"));
 			global_context.add_type(make_type_information<float>("float"));
@@ -1063,7 +1283,7 @@ namespace scs
 				}
 				else if (p->type == content_type::constant_integer)
 				{
-					return vc.new_unnamed_variable<int>("int", std::stoi(p->content)).to_constant();
+					return vc.new_unnamed_variable<int>("int", to_int(p->content)).to_constant();
 				}
 				else if (p->type == content_type::constant_string)
 				{
@@ -1327,31 +1547,6 @@ namespace scs
 			}
 			return backend::variable("void", nullptr);
 			});
-
-		in.add_function("int", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable("int", new int(args[0].as<int>()));
-			});
-		in.add_function("int", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable("int", new int(0));
-			});
-		in.add_function("float", { "float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable("float", new float(args[0].as<float>()));
-			});
-		in.add_function("float", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable("float", new float(0.0f));
-			});
-		in.add_function("char", { "char" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable("char", new char(args[0].as<char>()));
-			});
-		in.add_function("char", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable("char", new char('\0'));
-			});
-		in.add_function("string", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable("string", new std::string(args[0].as<std::string>()));
-			});
-		in.add_function("string", { }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
-			return backend::variable("string", new std::string());
-			});
 		in.add_function("print", {}, true, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			for (auto& i : args)
 			{
@@ -1413,6 +1608,16 @@ namespace scs
 		in.add_function("print", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
 			std::cout << args[0].as<std::string>();
 			return backend::variable("void", nullptr);
+			});
+		//math calculation
+		in.add_function("+", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<int>("int", args[0].as<int>() + args[1].as<int>()).to_constant();
+			});
+		in.add_function("+=", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<int>() += args[1].as<int>();
+			return args[0];
 			});
 	}
 }

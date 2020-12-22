@@ -86,8 +86,15 @@ void test5()
 	std::string str = R"(
 	(if true (print "hello state condition\n"))
 	(if false (print "true\n") (print "false\n"))
-
-	(while true (print "while test \n"))
+	(var float f 3.14)
+	(print f ' ' 0xff '\n')
+	(for (var int i 0) (< i 10) (= i (+ i 1))
+		(print i '\n')
+	)
+	(print "------------------- \n")
+	(for (var int i 9) (>= i 0) (+= i -1)
+		(print i '\n')
+	)
 )";
 	in.run_from_string(str);
 }
