@@ -632,7 +632,10 @@ namespace scs
 				pnode->content = tokens[index].content;
 				return index + 1;
 			}
-			else if (tokens[index].type == token_type::less_equal ||
+			else if (tokens[index].type == token_type::less_mark ||
+				tokens[index].type == token_type::biger_mark ||
+				tokens[index].type == token_type::equal_mark ||
+				tokens[index].type == token_type::less_equal ||
 				tokens[index].type == token_type::not_equal ||
 				tokens[index].type == token_type::bigger_equal ||
 				tokens[index].type == token_type::point_to ||
@@ -1247,6 +1250,82 @@ namespace scs
 			vc.add_function(f);
 
 			return backend::variable("function", (backend::function*)&(vc.get_function(func_name, arg_types)));
+			});
+		in.add_key_word("if", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
+			if (!p)
+				throw_error("nullptr error");
+
+			backend::variable judge;
+			backend::context nvc(&vc);
+
+			if (p->pchildren.size() < 3 ||
+				(judge = b.evaluate(p->pchildren[1], nvc)).type_name != "int")
+				throw_error("error if call");
+
+			if (p->pchildren.size() == 3)
+			{
+				if (judge.as<int>())
+				{
+					return b.evaluate(p->pchildren[2], nvc);
+				}
+			}
+			else if (p->pchildren.size() == 4)
+			{
+				if (judge.as<int>())
+				{
+					return b.evaluate(p->pchildren[2], nvc);
+				}
+				else
+				{
+					return b.evaluate(p->pchildren[3], nvc);
+				}
+			}
+			else
+				throw_error("error if call");
+			});
+		in.add_key_word("for", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
+			if (!p)
+				throw_error("nullptr error");
+
+			//(for (init) (judge) (step)
+			//	(work))
+
+			backend::context nvc(&vc);
+
+			if (p->pchildren.size() != 5 ||
+				p->pchildren[1]->type != content_type::null ||
+				p->pchildren[3]->type != content_type::null ||
+				p->pchildren[4]->type != content_type::null
+				)
+				throw_error("error for call");
+
+			b.evaluate(p->pchildren[1], nvc);
+			while (b.evaluate(p->pchildren[2], nvc).as<int>())
+			{
+				b.evaluate(p->pchildren[4], nvc);
+				b.evaluate(p->pchildren[3], nvc);
+			}
+			return backend::variable("void", nullptr);
+			});
+		in.add_key_word("while", [](backend& b, backend::context& vc, ast_node* p)->backend::variable {
+			if (!p)
+				throw_error("nullptr error");
+
+			//(while (judge)
+			//	(work))
+
+			backend::context nvc(&vc);
+
+			if (p->pchildren.size() != 3 ||
+				p->pchildren[2]->type != content_type::null
+				)
+				throw_error("error while call");
+
+			while (b.evaluate(p->pchildren[1], nvc).as<int>())
+			{
+				b.evaluate(p->pchildren[2], nvc);
+			}
+			return backend::variable("void", nullptr);
 			});
 
 		in.add_function("int", { "int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {

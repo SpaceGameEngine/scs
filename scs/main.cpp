@@ -79,11 +79,24 @@ void test4()
 )";
 	in.run_from_string(str);
 }
+void test5()
+{
+	interpreter in;
+	add_core_content(in);
+	std::string str = R"(
+	(if true (print "hello state condition\n"))
+	(if false (print "true\n") (print "false\n"))
+
+	(while true (print "while test \n"))
+)";
+	in.run_from_string(str);
+}
 int main()
 {
 	//test1();
 	//test2();
 	//test3();
-	test4();
+	//test4();
+	test5();
 	return 0;
 }
