@@ -95,6 +95,17 @@ void test5()
 	(for (var int i 9) (>= i 0) (+= i -1)
 		(print i '\n')
 	)
+	(var string str)
+	(read str)
+	(for (var int i 0) (< i (length_of str)) (+= i 1)
+		(print i " :\t" (at str i) '\n')
+	)
+	(var char c)
+	(read c)
+	(= (at str 0) c)
+	(print str '\n')
+	(print (== (at str 0) c ) '\n')
+	(print (== c '1') '\n')
 )";
 	in.run_from_string(str);
 }

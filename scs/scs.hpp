@@ -72,7 +72,8 @@ namespace scs
 		self_div = 43,				///=
 		self_mod = 44,				//%=
 		self_and = 45,				//&=
-		self_or = 46				//|=
+		self_or = 46,				//|=
+		double_equal = 47			//==
 	};
 
 	enum class parse_status
@@ -308,6 +309,8 @@ namespace scs
 			return token_type::self_and;
 		else if (str == "|=")
 			return token_type::self_or;
+		else if (str == "==")
+			return token_type::double_equal;
 		else
 			return token_type::null;
 	}
@@ -785,7 +788,8 @@ namespace scs
 				tokens[index].type == token_type::self_div ||
 				tokens[index].type == token_type::self_mod ||
 				tokens[index].type == token_type::self_and ||
-				tokens[index].type == token_type::self_or
+				tokens[index].type == token_type::self_or ||
+				tokens[index].type == token_type::double_equal
 				)
 			{
 				//symbol
@@ -922,7 +926,7 @@ namespace scs
 				return new_variable<T>("non_name_var@" + std::to_string(unname_count++), type_name, std::forward<Args>(args)...);
 			}
 
-			inline const variable& find_variable(const std::string& name)const
+			inline const variable& get_variable(const std::string& name)const
 			{
 				const context* vc = this;
 				while (vc != nullptr)
@@ -936,6 +940,19 @@ namespace scs
 				throw_error("do not have this variable");
 			}
 
+			inline std::optional<const variable*> find_variable(const std::string& name)const
+			{
+				const context* vc = this;
+				while (vc != nullptr)
+				{
+					auto iter = vc->variables.find(name);
+					if (iter != vc->variables.end())
+						return &iter->second;
+					else
+						vc = vc->pfather;
+				}
+				return std::nullopt;
+			}
 			inline bool has_variable(const std::string& name)const
 			{
 				const context* vc = this;
@@ -1271,7 +1288,7 @@ namespace scs
 				}
 				else if (p->type == content_type::variable)
 				{
-					return vc.find_variable(p->content);
+					return vc.get_variable(p->content);
 				}
 				else if (p->type == content_type::constant_character)
 				{
@@ -1316,23 +1333,27 @@ namespace scs
 	{
 	public:
 		template<typename T>
-		void add_type(const std::string& type_name)
+		inline void add_type(const std::string& type_name)
 		{
 			mbackend.get_global_context().add_type(backend::make_type_information<T>(type_name));
 		}
-		void add_function(const std::string& func_name, const std::vector<std::string>& func_args_type, bool is_va_arg, const std::function<backend::variable(backend::context&, const std::vector<backend::variable>&)>& run_func)
+		inline void add_function(const std::string& func_name, const std::vector<std::string>& func_args_type, bool is_va_arg, const std::function<backend::variable(backend::context&, const std::vector<backend::variable>&)>& run_func)
 		{
 			mbackend.get_global_context().add_function(backend::function{ func_name,func_args_type,run_func,is_va_arg });
 		}
-		void add_key_word(const std::string& key_word_name, const std::function<backend::variable(backend&, backend::context&, ast_node*)>& func)
+		inline void add_key_word(const std::string& key_word_name, const std::function<backend::variable(backend&, backend::context&, ast_node*)>& func)
 		{
 			mbackend.add_key_word(key_word_name, backend::key_word{ func });
 		}
-		backend::variable& add_variable(const std::string& var_name, const backend::variable& v)
+		inline backend::variable& add_variable(const std::string& var_name, const backend::variable& v)
 		{
 			return mbackend.get_global_context().move_existed_variable(var_name, v);
 		}
-		void run_from_file(const std::string& file_name)
+		inline std::optional<const backend::variable*> find_variable(const std::string& var_name)const
+		{
+			return mbackend.get_global_context().find_variable(var_name);
+		}
+		inline void run_from_file(const std::string& file_name)
 		{
 			std::string strbuff;
 			std::string total_str;
@@ -1346,7 +1367,7 @@ namespace scs
 			mbackend.run(mparser.get_ast_root());
 		}
 
-		void run_from_string(const std::string& str)
+		inline void run_from_string(const std::string& str)
 		{
 			mparser.parse(str);
 			mbackend.run(mparser.get_ast_root());
@@ -1357,7 +1378,7 @@ namespace scs
 	};
 
 
-	void add_core_content(interpreter& in)
+	inline void add_core_content(interpreter& in)
 	{
 		in.add_variable("true", backend::variable("int", new int(1))).to_constant();
 		in.add_variable("false", backend::variable("int", new int(0))).to_constant();
@@ -1618,6 +1639,133 @@ namespace scs
 				throw_error("can not change constant value");
 			args[0].as<int>() += args[1].as<int>();
 			return args[0];
+			});
+		in.add_function("-", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<int>("int", args[0].as<int>() - args[1].as<int>()).to_constant();
+			});
+		in.add_function("-=", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<int>() -= args[1].as<int>();
+			return args[0];
+			});
+		in.add_function("*", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<int>("int", args[0].as<int>() * args[1].as<int>()).to_constant();
+			});
+		in.add_function("*=", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<int>() *= args[1].as<int>();
+			return args[0];
+			});
+		in.add_function("/", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<int>("int", args[0].as<int>() / args[1].as<int>()).to_constant();
+			});
+		in.add_function("/=", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<int>() /= args[1].as<int>();
+			return args[0];
+			});
+		in.add_function("%", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<int>("int", args[0].as<int>() % args[1].as<int>()).to_constant();
+			});
+		in.add_function("%=", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<int>() %= args[1].as<int>();
+			return args[0];
+			});
+		in.add_function("&", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<int>("int", args[0].as<int>() & args[1].as<int>()).to_constant();
+			});
+		in.add_function("&=", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<int>() &= args[1].as<int>();
+			return args[0];
+			});
+		in.add_function("|", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<int>("int", args[0].as<int>() | args[1].as<int>()).to_constant();
+			});
+		in.add_function("|=", { "int","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<int>() |= args[1].as<int>();
+			return args[0];
+			});
+
+		in.add_function("+", { "float","float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<float>("float", args[0].as<float>() + args[1].as<float>()).to_constant();
+			});
+		in.add_function("+=", { "float","float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<float>() += args[1].as<float>();
+			return args[0];
+			});
+		in.add_function("-", { "float","float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<float>("float", args[0].as<float>() - args[1].as<float>()).to_constant();
+			});
+		in.add_function("-=", { "float","float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<float>() -= args[1].as<float>();
+			return args[0];
+			});
+		in.add_function("*", { "float","float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<float>("float", args[0].as<float>() * args[1].as<float>()).to_constant();
+			});
+		in.add_function("*=", { "float","float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<float>() *= args[1].as<float>();
+			return args[0];
+			});
+		in.add_function("/", { "float","float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<float>("float", args[0].as<float>() / args[1].as<float>()).to_constant();
+			});
+		in.add_function("/=", { "float","float" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<float>() /= args[1].as<float>();
+			return args[0];
+			});
+		in.add_function("+", { "char","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<char>("char", args[0].as<char>() + args[1].as<int>()).to_constant();
+			});
+		in.add_function("+=", { "char","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<char>() += args[1].as<int>();
+			return args[0];
+			});
+		in.add_function("-", { "char","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<char>("char", args[0].as<char>() - args[1].as<int>()).to_constant();
+			});
+		in.add_function("-=", { "char","int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<char>() -= args[1].as<int>();
+			return args[0];
+			});
+		in.add_function("+", { "string","string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<std::string>("string", args[0].as<std::string>() + args[1].as<std::string>()).to_constant();
+			});
+		in.add_function("+=", { "string","string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				throw_error("can not change constant value");
+			args[0].as<std::string>() += args[1].as<std::string>();
+			return args[0];
+			});
+		in.add_function("length_of", { "string" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			return vc.new_unnamed_variable<int>("int", args[0].as<std::string>().size()).to_constant();
+			});
+		in.add_function("at", { "string" ,"int" }, false, [](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			if (args[0].is_constant)
+				return backend::variable("char", &(args[0].as<std::string>()[args[1].as<int>()])).to_constant();
+			else
+				return backend::variable("char", &(args[0].as<std::string>()[args[1].as<int>()]));
 			});
 	}
 }
