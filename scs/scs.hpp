@@ -875,12 +875,6 @@ namespace scs
 			std::function<void* ()> default_construction_func;
 			std::function<void(void*)> destruction_func;
 			std::function<void(void*, void*)> copy_func;		//dest src
-			std::function<bool(void*, void*)> is_equal_func;
-			std::function<bool(void*, void*)> is_not_equal_func;
-			std::function<bool(void*, void*)> is_less_func;
-			std::function<bool(void*, void*)> is_less_or_equal_func;
-			std::function<bool(void*, void*)> is_bigger_func;
-			std::function<bool(void*, void*)> is_bigger_or_equal_func;
 		};
 
 		struct function;
@@ -978,30 +972,35 @@ namespace scs
 						variable re(t.type_name,t.default_construction_func());
 						t.copy_func(re.pcontent, args[0].pcontent);
 						return re;
-					} ,false });	//default construction
+					} ,false });	//copy construction
 				add_function(function{ "=",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
 					if (args[0].is_constant)
 						throw_error("can not change constant value");
 					t.copy_func(args[0].pcontent,args[1].pcontent);
 						return args[0];
 					} ,false });	//copy
-				add_function(function{ "==",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
-						return vc.new_unnamed_variable<int>("int",(t.is_equal_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+			}
+
+			template<typename T>
+			inline void add_basic_functions_for_type(const std::string& type_name)
+			{
+				add_function(function{ "==",{type_name,type_name},[](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",((args[0].as<T>() == args[1].as<T>()) ? 1 : 0)).to_constant();
 					} ,false });	//equal
-				add_function(function{ "!=",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
-						return vc.new_unnamed_variable<int>("int",(t.is_not_equal_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+				add_function(function{ "!=",{type_name,type_name},[](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",((args[0].as<T>() != args[1].as<T>()) ? 1 : 0)).to_constant();
 					} ,false });	//not equal
-				add_function(function{ "<",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
-						return vc.new_unnamed_variable<int>("int",(t.is_less_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+				add_function(function{ "<",{type_name,type_name},[](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",((args[0].as<T>() < args[1].as<T>()) ? 1 : 0)).to_constant();
 					} ,false });	//less
-				add_function(function{ "<=",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
-						return vc.new_unnamed_variable<int>("int",(t.is_less_or_equal_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+				add_function(function{ "<=",{type_name,type_name},[](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",((args[0].as<T>() <= args[1].as<T>()) ? 1 : 0)).to_constant();
 					} ,false });	//less or equal
-				add_function(function{ ">",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
-						return vc.new_unnamed_variable<int>("int",(t.is_bigger_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+				add_function(function{ ">",{type_name,type_name},[](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",((args[0].as<T>() > args[1].as<T>()) ? 1 : 0)).to_constant();
 					} ,false });	//bigger
-				add_function(function{ ">=",{t.type_name,t.type_name},[t](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
-						return vc.new_unnamed_variable<int>("int",(t.is_bigger_or_equal_func(args[0].pcontent,args[1].pcontent) ? 1 : 0)).to_constant();
+				add_function(function{ ">=",{type_name,type_name},[](backend::context& vc, const std::vector<backend::variable>& args) ->variable {
+						return vc.new_unnamed_variable<int>("int",((args[0].as<T>() >= args[1].as<T>()) ? 1 : 0)).to_constant();
 					} ,false });	//bigger or equal
 			}
 
@@ -1121,13 +1120,8 @@ namespace scs
 			return type_information{ type_name ,
 				[]() {return new T(); },
 				[](void* p) {delete reinterpret_cast<T*>(p); } ,
-				[](void* dest,void* src) {*reinterpret_cast<T*>(dest) = *reinterpret_cast<T*>(src); },
-				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) == *reinterpret_cast<T*>(p2); },
-				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) != *reinterpret_cast<T*>(p2); },
-				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) < *reinterpret_cast<T*>(p2); },
-				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) <= *reinterpret_cast<T*>(p2); },
-				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) > *reinterpret_cast<T*>(p2); },
-				[](void* p1,void* p2) {return *reinterpret_cast<T*>(p1) >= *reinterpret_cast<T*>(p2); }
+				[](void* dest,void* src) {*reinterpret_cast<T*>(dest) = *reinterpret_cast<T*>(src); }
+
 			};
 		}
 
@@ -1177,19 +1171,19 @@ namespace scs
 
 			global_context.add_type(type_information{ "void" ,
 				[]() {return nullptr; },
-				[](void*) {},[](void*,void*) {} ,
-				[](void*,void*) {return true; } ,
-				[](void*,void*) {return false; } ,
-				[](void*,void*) {return false; } ,
-				[](void*,void*) {return true; } ,
-				[](void*,void*) {return false; } ,
-				[](void*,void*) {return true; }
+				[](void*) {},
+				[](void*,void*) {}
 				});
 
 			global_context.add_type(make_type_information<char>("char"));
 			global_context.add_type(make_type_information<int>("int"));
 			global_context.add_type(make_type_information<float>("float"));
 			global_context.add_type(make_type_information<std::string>("string"));
+
+			global_context.add_basic_functions_for_type<int>("int");
+			global_context.add_basic_functions_for_type<float>("float");
+			global_context.add_basic_functions_for_type<char>("char");
+			global_context.add_basic_functions_for_type<std::string>("string");
 
 			global_context.add_function(function{ "eval",{},[](context&, const std::vector<variable>&)->variable {return variable("void",nullptr); } ,true });
 		}
@@ -1337,6 +1331,11 @@ namespace scs
 		{
 			mbackend.get_global_context().add_type(backend::make_type_information<T>(type_name));
 		}
+		template<typename T>
+		inline void add_basic_functions_for_type(const std::string& type_name)
+		{
+			mbackend.get_global_context().add_basic_functions_for_type<T>(type_name);
+		}
 		inline void add_function(const std::string& func_name, const std::vector<std::string>& func_args_type, bool is_va_arg, const std::function<backend::variable(backend::context&, const std::vector<backend::variable>&)>& run_func)
 		{
 			mbackend.get_global_context().add_function(backend::function{ func_name,func_args_type,run_func,is_va_arg });
@@ -1352,6 +1351,13 @@ namespace scs
 		inline std::optional<const backend::variable*> find_variable(const std::string& var_name)const
 		{
 			return mbackend.get_global_context().find_variable(var_name);
+		}
+		inline std::optional<const backend::function*> find_function(const std::string& func_name, const std::vector<std::string>& arg_types)
+		{
+			backend::function f;
+			f.function_name = func_name;
+			f.arguments_type_names = arg_types;
+			return mbackend.get_global_context().find_function_by_resolved_name(backend::resolve_function_name(f));
 		}
 		inline void run_from_file(const std::string& file_name)
 		{
