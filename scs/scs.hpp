@@ -1106,6 +1106,8 @@ namespace scs
 				return *f;
 			}
 
+		public:
+			friend class backend;
 		private:
 			std::unordered_map<std::string, variable> variables;
 			std::unordered_map<std::string, backend::function> functions;
@@ -1318,6 +1320,14 @@ namespace scs
 		{
 			return global_context;
 		}
+
+		void import_context(context& c)
+		{
+			auto ptop = &global_context;
+			while (ptop->pfather != nullptr)
+				ptop = ptop->pfather;
+			ptop->pfather = &c;
+		}
 	private:
 		std::unordered_map<std::string, key_word> key_words;
 		context global_context;
@@ -1378,9 +1388,24 @@ namespace scs
 			mparser.parse(str);
 			mbackend.run(mparser.get_ast_root());
 		}
+
+		inline void import_from_file(const std::string& file_name)
+		{
+			auto pi = new interpreter;
+			pi->run_from_file(file_name);
+			external_interpreter.push_back(pi);
+			mbackend.import_context(pi->mbackend.get_global_context());
+		}
+
+		~interpreter()
+		{
+			for (auto i : external_interpreter)
+				delete i;
+		}
 	private:
 		parser mparser;
 		backend mbackend;
+		std::vector<interpreter*> external_interpreter;
 	};
 
 
@@ -1772,6 +1797,11 @@ namespace scs
 				return backend::variable("char", &(args[0].as<std::string>()[args[1].as<int>()])).to_constant();
 			else
 				return backend::variable("char", &(args[0].as<std::string>()[args[1].as<int>()]));
+			});
+
+		in.add_function("import", { "string" }, false, [&in](backend::context& vc, const std::vector<backend::variable>& args)->backend::variable {
+			in.import_from_file(args[0].as<std::string>());
+			return backend::variable("void", nullptr);
 			});
 	}
 }
