@@ -1187,7 +1187,7 @@ namespace scs
 			global_context.add_basic_functions_for_type<char>("char");
 			global_context.add_basic_functions_for_type<std::string>("string");
 
-			global_context.add_function(function{ "eval",{},[](context&, const std::vector<variable>&)->variable {return variable("void",nullptr); } ,true });
+			global_context.add_function(function{ "eval",{},[](context&, const std::vector<variable>& args)->variable {return args[args.size() - 1]; } ,true });
 		}
 
 		inline ~backend()
