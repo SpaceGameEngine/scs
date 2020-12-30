@@ -914,6 +914,11 @@ namespace scs
 				return variables[name];
 			}
 
+			inline variable& move_existed_unnamed_variable(const variable& v)
+			{
+				return move_existed_variable("non_name_var@" + std::to_string(unname_count++), v);
+			}
+
 			template<typename T, typename... Args>
 			inline variable& new_unnamed_variable(const std::string& type_name, Args&&... args)
 			{
@@ -1187,7 +1192,12 @@ namespace scs
 			global_context.add_basic_functions_for_type<char>("char");
 			global_context.add_basic_functions_for_type<std::string>("string");
 
-			global_context.add_function(function{ "eval",{},[](context&, const std::vector<variable>& args)->variable {return args[args.size() - 1]; } ,true });
+			global_context.add_function(function{ "eval",{},[](context& vc, const std::vector<variable>& args)->variable {
+				auto ti = vc.get_type(args[args.size() - 1].type_name);
+				auto p = ti.default_construction_func();
+				ti.copy_func(p, args[args.size() - 1].pcontent);
+				return vc.move_existed_unnamed_variable(variable(ti.type_name,p)).to_constant();
+				} ,true });
 		}
 
 		inline ~backend()
