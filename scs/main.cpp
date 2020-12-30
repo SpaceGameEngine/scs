@@ -33,7 +33,6 @@ void test2()
 void test3()
 {
 	interpreter in;
-	add_core_content(in);
 	std::string str = R"((eval
 	(eval
 		(print 12.33 '\t' 111.231 '\n')
@@ -65,7 +64,6 @@ void test3()
 void test4()
 {
 	interpreter in;
-	add_core_content(in);
 	std::string str = R"(
 	(var int i)
 	(var float f)
@@ -82,7 +80,6 @@ void test4()
 void test5()
 {
 	interpreter in;
-	add_core_content(in);
 	std::string str = R"(
 	(if true (print "hello state condition\n"))
 	(if false (print "true\n") (print "false\n"))
