@@ -1193,10 +1193,11 @@ namespace scs
 			global_context.add_basic_functions_for_type<std::string>("string");
 
 			global_context.add_function(function{ "eval",{},[](context& vc, const std::vector<variable>& args)->variable {
-				auto ti = vc.get_type(args[args.size() - 1].type_name);
-				auto p = ti.default_construction_func();
-				ti.copy_func(p, args[args.size() - 1].pcontent);
-				return vc.move_existed_unnamed_variable(variable(ti.type_name,p)).to_constant();
+				auto re = args[args.size() - 1];
+				auto ti = vc.get_type(re.type_name);
+				auto pre = ti.default_construction_func();
+				ti.copy_func(pre, re.pcontent);
+				return vc.move_existed_unnamed_variable(backend::variable(ti.type_name, pre)).to_constant();
 				} ,true });
 		}
 
@@ -1453,7 +1454,11 @@ namespace scs
 						ti.copy_func(pnv, args[i].pcontent);
 						nvc.move_existed_variable(arg_names[i], backend::variable(ti.type_name, pnv));
 					}
-					return b.evaluate(run_node, nvc);
+					auto re = b.evaluate(run_node, nvc);
+					auto ti = nvc.get_type(re.type_name);
+					auto pre = ti.default_construction_func();
+					ti.copy_func(pre, re.pcontent);
+					return vc.move_existed_unnamed_variable(backend::variable(ti.type_name, pre)).to_constant();
 				};
 
 				vc.add_function(f);
