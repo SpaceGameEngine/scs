@@ -1480,18 +1480,30 @@ namespace scs
 				{
 					if (judge.as<int>())
 					{
-						return b.evaluate(p->pchildren[2], nvc);
+						auto re = b.evaluate(p->pchildren[2], nvc);
+						auto ti = nvc.get_type(re.type_name);
+						auto pre = ti.default_construction_func();
+						ti.copy_func(pre, re.pcontent);
+						return vc.move_existed_unnamed_variable(backend::variable(ti.type_name, pre)).to_constant();
 					}
 				}
 				else if (p->pchildren.size() == 4)
 				{
 					if (judge.as<int>())
 					{
-						return b.evaluate(p->pchildren[2], nvc);
+						auto re = b.evaluate(p->pchildren[2], nvc);
+						auto ti = nvc.get_type(re.type_name);
+						auto pre = ti.default_construction_func();
+						ti.copy_func(pre, re.pcontent);
+						return vc.move_existed_unnamed_variable(backend::variable(ti.type_name, pre)).to_constant();
 					}
 					else
 					{
-						return b.evaluate(p->pchildren[3], nvc);
+						auto re = b.evaluate(p->pchildren[3], nvc);
+						auto ti = nvc.get_type(re.type_name);
+						auto pre = ti.default_construction_func();
+						ti.copy_func(pre, re.pcontent);
+						return vc.move_existed_unnamed_variable(backend::variable(ti.type_name, pre)).to_constant();
 					}
 				}
 				else
