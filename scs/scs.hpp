@@ -1333,14 +1333,6 @@ namespace scs
 		{
 			return global_context;
 		}
-
-		void import_context(context& c)
-		{
-			auto ptop = &global_context;
-			while (ptop->pfather != nullptr)
-				ptop = ptop->pfather;
-			ptop->pfather = &c;
-		}
 	private:
 		std::unordered_map<std::string, key_word> key_words;
 		context global_context;
@@ -1821,21 +1813,30 @@ namespace scs
 
 		inline void import_from_file(const std::string& file_name)
 		{
-			auto pi = new interpreter;
-			pi->run_from_file(file_name);
-			external_interpreter.push_back(pi);
-			mbackend.import_context(pi->mbackend.get_global_context());
+			std::string strbuff;
+			std::string total_str;
+			std::ifstream file(file_name);
+
+			while (std::getline(file, strbuff))
+			{
+				total_str += strbuff + '\n';
+			}
+			auto pp = new parser;
+			pp->parse(total_str);
+			external_parser.push_back(pp);
+			for (auto i : pp->get_ast_root()->pchildren)
+				mbackend.evaluate(i, mbackend.get_global_context());
 		}
 
 		~interpreter()
 		{
-			for (auto i : external_interpreter)
+			for (auto i : external_parser)
 				delete i;
 		}
 	private:
 		parser mparser;
 		backend mbackend;
-		std::vector<interpreter*> external_interpreter;
+		std::vector<parser*> external_parser;
 	};
 
 
