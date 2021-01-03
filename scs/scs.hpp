@@ -1079,10 +1079,12 @@ namespace scs
 			{
 				const function* f = nullptr;
 				function buff_f;
+				buff_f.is_va_arg = false;
 				buff_f.function_name = func_name;
 				buff_f.arguments_type_names = arg_types;
 				auto fname = backend::resolve_function_name(buff_f);
-
+				buff_f.is_va_arg = true;
+				auto fname2 = backend::resolve_function_name(buff_f);
 				auto opt = find_function_by_resolved_name(fname);
 				if (opt)
 				{
@@ -1090,7 +1092,7 @@ namespace scs
 				}
 				else
 				{
-					auto opt2 = find_function_by_resolved_name(func_name);
+					auto opt2 = find_function_by_resolved_name(fname2);
 					if (opt2)
 						f = opt2.value();
 					else
@@ -1208,11 +1210,11 @@ namespace scs
 
 		inline static std::string resolve_function_name(const function& f)
 		{
-			std::string re = f.function_name;
+			std::string re = "_f_" + f.function_name;;
 			if (f.is_va_arg == false)
 			{
 				for (auto& i : f.arguments_type_names)
-					re += "@" + i;
+					re += "_" + i;
 			}
 			return re;
 		}
