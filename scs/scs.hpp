@@ -651,6 +651,7 @@ namespace scs
 	  | CharacterContent
 	  | StringContent
 	Bs : B Bs
+	  | null
 	*/
 
 	class parser

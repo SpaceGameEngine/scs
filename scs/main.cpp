@@ -106,12 +106,45 @@ void test5()
 )";
 	in.run_from_string(str);
 }
+
+void repl()
+{
+	interpreter in;
+	std::string input;
+	auto read_sentence = []() -> std::string {
+		std::string input_line;
+		std::string re;
+		bool read_status = false;
+		uint64_t left_brack_count = 0;
+		while (read_status = static_cast<bool>(std::getline(std::cin, input_line)))
+		{
+			re += input_line;
+			for (auto c : input_line)
+			{
+				if (c == '(')
+					++left_brack_count;
+				else if (c == ')')
+					--left_brack_count;
+			}
+			if (!left_brack_count)
+				return re;
+		}
+		if (left_brack_count)
+			throw_error("repl input bracket error");
+		return re;
+	};
+	while ((input = read_sentence()).size())
+	{
+		in.run_from_string(input);
+	}
+}
 int main()
 {
 	//test1();
 	//test2();
 	//test3();
 	//test4();
-	test5();
+	//test5();
+	repl();
 	return 0;
 }
