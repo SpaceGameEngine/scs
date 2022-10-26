@@ -115,7 +115,7 @@ void repl()
 		std::string input_line;
 		std::string re;
 		bool read_status = false;
-		uint64_t left_brack_count = 0;
+		int64_t left_brack_count = 0;
 		while (read_status = static_cast<bool>(std::getline(std::cin, input_line)))
 		{
 			re += input_line;
@@ -128,6 +128,8 @@ void repl()
 			}
 			if (!left_brack_count)
 				return re;
+			if (left_brack_count < 0)
+				throw_error("repl input bracket error");
 		}
 		if (left_brack_count)
 			throw_error("repl input bracket error");
