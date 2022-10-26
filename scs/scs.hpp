@@ -1045,7 +1045,7 @@ namespace scs
 					functions.insert(std::make_pair(fname, f));
 				else
 					throw_error("the function has already existed");
-				new_variable <function>(fname, "function", f);
+				new_variable<function>(fname, "function", f);
 			}
 
 			inline const function& get_function_by_resolved_name(const std::string& resolved_func_name)const
@@ -1201,6 +1201,13 @@ namespace scs
 				auto pre = ti.default_construction_func();
 				ti.copy_func(pre, re.pcontent);
 				return vc.move_existed_unnamed_variable(backend::variable(ti.type_name, pre)).to_constant();
+				} ,true });
+
+			global_context.add_function(function{ "apply",{},[](context& vc, const std::vector<variable>& args)->variable {
+				if (args.size() == 0)
+					throw_error("must apply a function");
+				function& f = args[0].as<function>();
+				return f.run_func(vc, std::vector<variable>(args.cbegin() + 1, args.cend()));
 				} ,true });
 		}
 
