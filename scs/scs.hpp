@@ -14,7 +14,7 @@
 
 namespace scs
 {
-	void throw_error(const std::string& str)
+	inline void throw_error(const std::string& str)
 	{
 		std::cerr << str << std::endl;
 #ifdef _WIN32
@@ -167,7 +167,7 @@ namespace scs
 		}
 	}
 
-	int to_int(const std::string& str)
+	inline int to_int(const std::string& str)
 	{
 		bool is_nega = false;
 		std::string str2;
