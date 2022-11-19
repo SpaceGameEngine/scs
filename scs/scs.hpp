@@ -1209,6 +1209,27 @@ namespace scs
 				function& f = args[0].as<function>();
 				return f.run_func(vc, std::vector<variable>(args.cbegin() + 1, args.cend()));
 				} ,true });
+
+			add_key_word("get_func", key_word{
+				[](backend& b, backend::context& vc, ast_node* p)->backend::variable {
+					if (p->pchildren.size() < 2)
+						throw_error("get_func need at least 1 argument");
+					if (p->pchildren[1]->type != content_type::variable)
+						throw_error("get_func's arg0 must be a function name");
+					std::string function_name = p->pchildren[1]->content;
+					std::vector<std::string> function_args;
+					for (std::size_t i = 2; i < p->pchildren.size(); ++i)
+					{
+						auto arg_i = p->pchildren[i];
+						if (arg_i->type != content_type::variable)
+							throw_error("get_func's arg1...n must be type name");
+						if (vc.find_type(arg_i->content).has_value() == false)
+							throw_error("do not have this type");
+						function_args.emplace_back(arg_i->content);
+					}
+					return *vc.find_variable(resolve_function_name(vc.get_function(function_name, function_args))).value();
+				}
+				});
 		}
 
 		inline ~backend()
